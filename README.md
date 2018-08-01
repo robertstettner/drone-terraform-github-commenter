@@ -9,7 +9,7 @@ The following parameters are used to configure the plugin:
 - `token`: The token to be used to create a GitHub comment. Required. Preferred to be a Drone secret.
 - `title`: The title of the comment. Optional.
 - `root_dir`: The root directory of where the Terraform plan ran. Default is `.`
-- `filename`: The filename to use as the Terraform plan output. Default is `plan.out`.
+- `filename`: The filename to use as the Terraform plan output. Default is `plan.tfout`.
 - `type`: The type of comment. Possible values `pr`, `commit`. Default is `pr`
 
 This plugin assumes you have Drone setup on an AWS EC2 instance, with an IAM instance profile.

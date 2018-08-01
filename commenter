@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-filename=${PLUGIN_FILENAME:-plan.out}
+filename=${PLUGIN_FILENAME:-plan.tfout}
 root_dir=${PLUGIN_ROOT_DIR:-.}
 token=${PLUGIN_TOKEN:-$GITHUB_TOKEN}
 owner=${DRONE_REPO_OWNER}
@@ -9,6 +9,10 @@ type=${PLUGIN_TYPE:-pr}
 sha=${DRONE_COMMIT_SHA}
 number=${DRONE_PULL_REQUEST}
 title=""
+
+if [[ -z "$number" ]]; then
+  type="commit"
+fi
 
 case $type in
   commit)
