@@ -31,14 +31,13 @@ case $type in
 esac
 
 if [[ -n "$PLUGIN_TITLE" ]]; then
-  title="### $PLUGIN_TITLE"
+  title="### $PLUGIN_TITLE<br/>"
 fi
 
-github-commenter \
+cat $root_dir/$filename | github-commenter \
   -token $token \
   -owner $owner \
   -repo $repo \
   -type $type \
   $arg \
-  -format "Output from \`terraform plan\`:<br/>\`\`\`{{.}}\`\`\`" \
-  -comment "$(cat $root_dir/$filename)"
+  -format "${title}Output from \`terraform plan\`:<br/>\`\`\`{{.}}\`\`\`"
