@@ -1,0 +1,40 @@
+#!/bin/bash -e
+
+filename=${PLUGIN_FILENAME:-plan.out}
+root_dir=${PLUGIN_ROOT_DIR:-.}
+token=${PLUGIN_TOKEN:-$GITHUB_TOKEN}
+owner=${DRONE_REPO_OWNER}
+repo=${DRONE_REPO_NAME}
+type=${PLUGIN_TYPE:-pr}
+sha=${DRONE_COMMIT_SHA}
+number=${DRONE_PULL_REQUEST}
+title=""
+
+case $type in
+  commit)
+    arg="-sha $sha"
+  ;;
+  pr)
+    arg="-number $number"
+  ;;
+  *)
+    echo "-- Supported modes:
+          commit - Commit comment.
+          pr - Pull Request comment.
+        "
+    exit 1
+  ;;
+esac
+
+if [[ -n "$PLUGIN_TITLE" ]]; then
+  title="### $PLUGIN_TITLE"
+fi
+
+github-commenter \
+  -token $token \
+  -owner $owner \
+  -repo $repo \
+  -type $type \
+  $arg \
+  -format "Output from \`terraform plan\`:<br/>\`\`\`{{.}}\`\`\`" \
+  -comment "$(cat $root_dir/$filename)"
