@@ -2,13 +2,14 @@
 
 filename=${PLUGIN_FILENAME:-plan.tfout}
 root_dir=${PLUGIN_ROOT_DIR:-.}
-token=${PLUGIN_TOKEN:-$GITHUB_TOKEN}
-owner=${DRONE_REPO_OWNER}
-repo=${DRONE_REPO_NAME}
 type=${PLUGIN_TYPE:-pr}
 sha=${DRONE_COMMIT_SHA}
 number=${DRONE_PULL_REQUEST}
 title=""
+
+export GITHUB_TOKEN=${PLUGIN_TOKEN:-$GITHUB_TOKEN}
+export GITHUB_OWNER=${DRONE_REPO_OWNER}
+export GITHUB_REPO=${DRONE_REPO_NAME}
 
 if [[ -z "$number" ]]; then
   type="commit"
@@ -16,10 +17,10 @@ fi
 
 case $type in
   commit)
-    arg="-sha $sha"
+    export GITHUB_COMMIT_SHA="$sha"
   ;;
   pr)
-    arg="-number $number"
+    export GITHUB_PR_ISSUE_NUMBER="$number"
   ;;
   *)
     echo "-- Supported modes:
@@ -34,12 +35,8 @@ if [[ -n "$PLUGIN_TITLE" ]]; then
   title="### $PLUGIN_TITLE<br/>"
 fi
 
-GITHUB_COMMENT=$(cat $root_dir/$filename)
+export GITHUB_COMMENT_TYPE="$type"
+export GITHUB_COMMENT=$(cat $root_dir/$filename)
+export GITHUB_COMMENT_FORMAT="${title}Output from \`terraform plan\`:<br/>\`\`\`{{.}}\`\`\`"
 
-github-commenter \
-  -token $token \
-  -owner $owner \
-  -repo $repo \
-  -type $type \
-  $arg \
-  -format "${title}Output from \`terraform plan\`:<br/>\`\`\`{{.}}\`\`\`"
+github-commenter
