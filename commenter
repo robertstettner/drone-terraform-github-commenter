@@ -34,7 +34,9 @@ if [[ -n "$PLUGIN_TITLE" ]]; then
   title="### $PLUGIN_TITLE<br/>"
 fi
 
-cat $root_dir/$filename | github-commenter \
+GITHUB_COMMENT=$(cat $root_dir/$filename)
+
+github-commenter \
   -token $token \
   -owner $owner \
   -repo $repo \
