@@ -36,7 +36,7 @@ if [[ -n "$PLUGIN_TITLE" ]]; then
 fi
 
 export GITHUB_COMMENT_TYPE="$type"
-export GITHUB_COMMENT=$(cat $root_dir/$filename)
+export GITHUB_COMMENT=$(cat $root_dir/$filename 2>&1)
 export GITHUB_COMMENT_FORMAT="${title}Output from \`terraform plan\`:<br/>\`\`\`{{.}}\`\`\`"
 
 github-commenter
