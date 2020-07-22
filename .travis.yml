@@ -1,13 +1,19 @@
 sudo: required
-
 services:
   - docker
+language: go
+go: 1.13
+gobuild_args: -ldflags "-s -w -X main.revision=$(git rev-parse HEAD)" -a
 
-language: generic
+env:
+  - TERRAFORM_VERSION=0.11.14
+  - TERRAFORM_VERSION=0.12.16
+  - TERRAFORM_VERSION=0.12.20
 
-script:
-  - if [ "$TRAVIS_BRANCH" == "master" ]; then
-    docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
-    docker build . -t robertstettner/drone-terraform-github-commenter;
-    docker push robertstettner/drone-terraform-github-commenter;
-    fi
+before_deploy:
+  - docker build . -t robertstettner/drone-terraform-github-commenter:${TRAVIS_TAG}-${TERRAFORM_VERSION} --build-arg terraform_version=${TERRAFORM_VERSION}
+deploy:
+  provider: script
+  script: bash docker_push
+  on:
+    tags: true

@@ -1,32 +1,41 @@
 # drone-terraform-github-commenter
 
-This plugin for Drone posts a comment to a GitHub PR, with the Terraform plan.
+This plugin for Drone posts a comment to a GitHub PR, with the Terraform plan output.
 
 ## Configuration
 
 The following parameters are used to configure the plugin:
 
-- `token`: The token to be used to create a GitHub comment. Required. Preferred to be a Drone secret.
-- `title`: The title of the comment. Optional.
+- `title`: The title of the comment. Default is `Terraform Plan Output`.
+- `recreate`: A flag to recreate the comment every time, otherwise comment is updated based on the title. Default is `false`.
+- `issue_num`: The PR or Issue number to post the comment. Optional.
 - `root_dir`: The root directory of where the Terraform plan ran. Default is `.`
-- `filename`: The filename to use as the Terraform plan output. Default is `plan.tfout`.
-- `type`: The type of comment. Possible values `pr`, `commit`. Default is `pr`
+- `tf_data_dir`: The data directory where Terraform stores providers, plugins, and modules. Default is `.terraform`.
+- `tf_version`: The Terraform version to download and use, when not provided uses the prepackaged Terraform in the Docker image. Optional.
+- `base_url`: The GitHub Base URL, for use with GitHub Enterprise Server. Default is `https://api.github.com/`.
 
-This plugin assumes you have Drone setup on an AWS EC2 instance, with an IAM instance profile.
+### Secrets
+
+All the following secrets are optional:
+
+- `github_username`
+- `github_password`
+- `github_token` or `github_release_api_key`
+
+This plugin is setup to use the GitHub credentials from Drone's netrc environment variables.
 
 ### Drone configuration example
 
 ```yaml
 pipeline:
   plan:
-    image: jmccann/drone-terraform:5
+    image: jmccann/drone-terraform:6.3-0.12.20
     actions:
       - validate
       - plan
 
   comment-plan:
     image: robertstettner/drone-terraform-github-commenter
-    token: 456deadbeef123
 ```
 
 Usage with Drone secret:
@@ -41,6 +50,5 @@ pipeline:
 
   comment-plan:
     image: robertstettner/drone-terraform-github-commenter
--   token: 456deadbeef123
 +   secrets: [ github_token ]
 ```
