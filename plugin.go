@@ -1,14 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/Sirupsen/logrus"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
@@ -26,11 +35,22 @@ type (
 		Recreate         bool
 		Username         string
 		Token            string
+		InitOptions      InitOptions
+		Cacert           string
+		Debug            bool
+		RoleARN          string
 		TerraformRootDir string
 		TerraformDataDir string
 
 		gitClient  *github.Client
 		gitContext context.Context
+	}
+
+	// InitOptions include options for the Terraform's init command
+	InitOptions struct {
+		BackendConfig []string `json:"backend-config"`
+		Lock          *bool    `json:"lock"`
+		LockTimeout   string   `json:"lock-timeout"`
 	}
 
 	// Plugin represents the plugin instance to be executed
@@ -39,6 +59,26 @@ type (
 		Terraform Terraform
 	}
 )
+
+// RunCommand executes arbitrary commands to be run in the Terraform root dir
+func (p Plugin) RunCommand(c *exec.Cmd, stdout io.Writer, stderr io.Writer) error {
+	if c.Dir == "" {
+		wd, err := os.Getwd()
+		if err == nil {
+			c.Dir = wd
+		}
+	}
+	if p.Config.TerraformRootDir != "" {
+		c.Dir = c.Dir + "/" + p.Config.TerraformRootDir
+	}
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if p.Config.Debug {
+		trace(c)
+	}
+
+	return c.Run()
+}
 
 // Exec executes the plugin
 func (p Plugin) Exec() error {
@@ -58,9 +98,36 @@ func (p Plugin) Exec() error {
 			return err
 		}
 	}
+
+	if p.Config.RoleARN != "" {
+		assumeRole(p.Config.RoleARN)
+	}
+
 	os.Setenv("TF_DATA_DIR", p.Config.TerraformDataDir)
 
-	msg, err := getPlanMessage(p.Config)
+	var commands []*exec.Cmd
+
+	commands = append(commands, exec.Command("terraform", "version"))
+
+	if p.Config.Cacert != "" {
+		commands = append(commands, installCaCert(p.Config.Cacert))
+	}
+
+	commands = append(commands, deleteCache(p.Config.TerraformDataDir))
+	commands = append(commands, initCommand(p.Config.InitOptions))
+	commands = append(commands, getModules())
+
+	for _, c := range commands {
+		err := p.RunCommand(c, os.Stdout, os.Stderr)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error": err,
+			}).Fatal("Failed to execute a command")
+		}
+		logrus.Debug("Command completed successfully")
+	}
+
+	msg, err := p.getPlanOutput()
 	if err != nil {
 		return err
 	}
@@ -75,13 +142,14 @@ func (p Plugin) Exec() error {
 			return err
 		}
 		if p.Config.IssueNum == 0 && err == nil {
-			fmt.Println("Pull request number not found")
+			logrus.Info("Pull request number not found")
 			return nil
 		}
 	}
 
 	if p.Config.Recreate {
 		_, _, err = p.Config.gitClient.Issues.CreateComment(p.Config.gitContext, p.Config.RepoOwner, p.Config.RepoName, p.Config.IssueNum, ic)
+		logrus.Info("Created comment in PR")
 		return err
 	}
 
@@ -89,16 +157,17 @@ func (p Plugin) Exec() error {
 	// Append plugin comment ID to comment message so we can search for it later
 	message := fmt.Sprintf("%s\n<!-- id: %s -->\n", msg, key)
 	ic.Body = &message
-
 	comment, err := p.Comment(key)
-
 	if err != nil {
 		return err
 	}
 
 	if comment != nil {
 		_, _, err = p.Config.gitClient.Issues.EditComment(p.Config.gitContext, p.Config.RepoOwner, p.Config.RepoName, int64(*comment.ID), ic)
-		return err
+		logrus.Info("Updated comment in PR")
+	} else {
+		_, _, err = p.Config.gitClient.Issues.CreateComment(p.Config.gitContext, p.Config.RepoOwner, p.Config.RepoName, p.Config.IssueNum, ic)
+		logrus.Info("Created comment in PR")
 	}
 
 	return nil
@@ -229,7 +298,9 @@ func getTfoutPath() string {
 	return fmt.Sprintf("%s.plan.tfout", terraformDataDir)
 }
 
-func getPlanMessage(config Config) (string, error) {
+func (p Plugin) getPlanOutput() (string, error) {
+	var out bytes.Buffer
+
 	file := getTfoutPath()
 
 	c := exec.Command(
@@ -238,21 +309,87 @@ func getPlanMessage(config Config) (string, error) {
 		"-no-color",
 		file,
 	)
-	if c.Dir == "" {
-		wd, err := os.Getwd()
-		if err == nil {
-			c.Dir = wd
-		}
-	}
-	if config.TerraformRootDir != "" {
-		c.Dir = c.Dir + "/" + config.TerraformRootDir
-	}
-	out, err := c.Output()
+	err := p.RunCommand(c, &out, os.Stderr)
 	if err != nil {
 		return "", err
 	}
 
-	message := fmt.Sprintf("## %s\n\n```\n%s```\n", config.Title, out)
+	message := fmt.Sprintf("## %s\n\n```diff\n%s```\n", p.Config.Title, out.String())
 
 	return message, nil
+}
+
+func assumeRole(roleArn string) {
+	client := sts.New(session.New())
+	duration := time.Hour * 1
+	stsProvider := &stscreds.AssumeRoleProvider{
+		Client:          client,
+		Duration:        duration,
+		RoleARN:         roleArn,
+		RoleSessionName: "drone",
+	}
+
+	value, err := credentials.NewCredentials(stsProvider).Get()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err,
+		}).Fatal("Error assuming role!")
+	}
+	os.Setenv("AWS_ACCESS_KEY_ID", value.AccessKeyID)
+	os.Setenv("AWS_SECRET_ACCESS_KEY", value.SecretAccessKey)
+	os.Setenv("AWS_SESSION_TOKEN", value.SessionToken)
+}
+
+func deleteCache(terraformDataDir string) *exec.Cmd {
+	return exec.Command(
+		"rm",
+		"-rf",
+		terraformDataDir,
+	)
+}
+
+func getModules() *exec.Cmd {
+	return exec.Command(
+		"terraform",
+		"get",
+	)
+}
+
+func initCommand(config InitOptions) *exec.Cmd {
+	args := []string{
+		"init",
+	}
+
+	for _, v := range config.BackendConfig {
+		args = append(args, fmt.Sprintf("-backend-config=%s", v))
+	}
+
+	// True is default in TF
+	if config.Lock != nil {
+		args = append(args, fmt.Sprintf("-lock=%t", *config.Lock))
+	}
+
+	// "0s" is default in TF
+	if config.LockTimeout != "" {
+		args = append(args, fmt.Sprintf("-lock-timeout=%s", config.LockTimeout))
+	}
+
+	// Fail Terraform execution on prompt
+	args = append(args, "-input=false")
+
+	return exec.Command(
+		"terraform",
+		args...,
+	)
+}
+
+func installCaCert(cacert string) *exec.Cmd {
+	ioutil.WriteFile("/usr/local/share/ca-certificates/ca_cert.crt", []byte(cacert), 0644)
+	return exec.Command(
+		"update-ca-certificates",
+	)
+}
+
+func trace(cmd *exec.Cmd) {
+	fmt.Println("$", strings.Join(cmd.Args, " "))
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 
 	"github.com/Sirupsen/logrus"
@@ -73,6 +74,26 @@ func main() {
 			Usage:  "changes the location where Terraform keeps its per-working-directory data, such as the current remote backend configuration",
 			EnvVar: "PLUGIN_TF_DATA_DIR",
 		},
+		cli.StringFlag{
+			Name:   "ca_cert",
+			Usage:  "ca cert to add to your environment to allow terraform to use internal/private resources",
+			EnvVar: "PLUGIN_CA_CERT",
+		},
+		cli.StringFlag{
+			Name:   "init_options",
+			Usage:  "options for the init command. See https://www.terraform.io/docs/commands/init.html",
+			EnvVar: "PLUGIN_INIT_OPTIONS",
+		},
+		cli.BoolFlag{
+			Name:   "debug",
+			Usage:  "whether or not to show terraform commands to stdout",
+			EnvVar: "PLUGIN_DEBUG",
+		},
+		cli.StringFlag{
+			Name:   "role_arn_to_assume",
+			Usage:  "A role to assume before running the terraform commands",
+			EnvVar: "PLUGIN_ROLE_ARN_TO_ASSUME",
+		},
 
 		//
 		// drone env
@@ -105,6 +126,9 @@ func run(c *cli.Context) error {
 		"Revision": revision,
 	}).Info("Drone Terraform GitHub Commenter Plugin Version")
 
+	initOptions := InitOptions{}
+	json.Unmarshal([]byte(c.String("init_options")), &initOptions)
+
 	plugin := Plugin{
 		Config: Config{
 			BaseURL:          c.String("base-url"),
@@ -117,6 +141,10 @@ func run(c *cli.Context) error {
 			Token:            c.String("api-key"),
 			Recreate:         c.Bool("recreate"),
 			Username:         c.String("username"),
+			InitOptions:      initOptions,
+			Cacert:           c.String("ca_cert"),
+			Debug:            c.Bool("debug"),
+			RoleARN:          c.String("role_arn_to_assume"),
 			TerraformRootDir: c.String("tf_root_dir"),
 			TerraformDataDir: c.String("tf_data_dir"),
 		},
