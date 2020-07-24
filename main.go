@@ -48,6 +48,12 @@ func main() {
 			Usage:  "title for comment",
 			EnvVar: "PLUGIN_TITLE",
 		},
+		cli.StringFlag{
+			Name:   "mode",
+			Value:  "full",
+			Usage:  "comment mode [summary, simple, full]",
+			EnvVar: "PLUGIN_MODE",
+		},
 		cli.IntFlag{
 			Name:   "issue-num",
 			Usage:  "Issue #",
@@ -114,6 +120,25 @@ func main() {
 			Usage:  "git commit SHA",
 			EnvVar: "DRONE_COMMIT_SHA",
 		},
+
+		//
+		// netrc env
+		//
+		cli.StringFlag{
+			Name:   "netrc.machine",
+			Usage:  "netrc machine",
+			EnvVar: "DRONE_NETRC_MACHINE",
+		},
+		cli.StringFlag{
+			Name:   "netrc.username",
+			Usage:  "netrc username",
+			EnvVar: "DRONE_NETRC_USERNAME",
+		},
+		cli.StringFlag{
+			Name:   "netrc.password",
+			Usage:  "netrc password",
+			EnvVar: "DRONE_NETRC_PASSWORD",
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -132,6 +157,7 @@ func run(c *cli.Context) error {
 	plugin := Plugin{
 		Config: Config{
 			BaseURL:          c.String("base-url"),
+			Mode:             c.String("mode"),
 			Title:            c.String("title"),
 			IssueNum:         c.Int("issue-num"),
 			Password:         c.String("password"),
@@ -147,6 +173,11 @@ func run(c *cli.Context) error {
 			RoleARN:          c.String("role_arn_to_assume"),
 			TerraformRootDir: c.String("tf_root_dir"),
 			TerraformDataDir: c.String("tf_data_dir"),
+		},
+		Netrc: Netrc{
+			Login:    c.String("netrc.username"),
+			Machine:  c.String("netrc.machine"),
+			Password: c.String("netrc.password"),
 		},
 		Terraform: Terraform{
 			Version: c.String("tf.version"),

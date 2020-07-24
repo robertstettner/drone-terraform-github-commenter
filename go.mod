@@ -2,6 +2,8 @@ module github.com/robertstettner/drone-terraform-github-commenter
 
 require (
 	github.com/Sirupsen/logrus v0.0.0-20160829202321-3ec0642a7fb6
+	github.com/aws/aws-sdk-go v1.33.11
+	github.com/franela/goblin v0.0.0-20200722185118-cb67619f1d10
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect

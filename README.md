@@ -7,12 +7,20 @@ This plugin for Drone posts a comment to a GitHub PR, with the Terraform plan ou
 The following parameters are used to configure the plugin:
 
 - `title`: The title of the comment. Default is `Terraform Plan Output`.
+- `mode`: The display mode of the comment. Default is `full`. See below.
 - `recreate`: A flag to recreate the comment every time, otherwise comment is updated based on the title. Default is `false`.
 - `issue_num`: The PR or Issue number to post the comment. Optional.
 - `root_dir`: The root directory of where the Terraform plan ran. Default is `.`
 - `tf_data_dir`: The data directory where Terraform stores providers, plugins, and modules. Default is `.terraform`.
 - `tf_version`: The Terraform version to download and use, when not provided uses the prepackaged Terraform in the Docker image. Optional.
 - `base_url`: The GitHub Base URL, for use with GitHub Enterprise Server. Default is `https://api.github.com/`.
+
+### Display mode
+
+There are three types of modes:
+- `summary`: Only shows total resources that will be created, updated or destroyed.
+- `simple`: List resources that will be changed, and displays summary.
+- `full`: Shows full plan.
 
 ### Secrets
 

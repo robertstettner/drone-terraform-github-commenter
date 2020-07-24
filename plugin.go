@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/google/go-github/github"
+	"github.com/robertstettner/drone-terraform-github-commenter/parser"
 	"golang.org/x/oauth2"
 )
 
@@ -28,6 +31,7 @@ type (
 		BaseURL          string
 		IssueNum         int
 		Title            string
+		Mode             string
 		Password         string
 		RepoName         string
 		RepoOwner        string
@@ -56,7 +60,15 @@ type (
 	// Plugin represents the plugin instance to be executed
 	Plugin struct {
 		Config    Config
+		Netrc     Netrc
 		Terraform Terraform
+	}
+
+	// Netrc is credentials for cloning
+	Netrc struct {
+		Machine  string
+		Login    string
+		Password string
 	}
 )
 
@@ -103,6 +115,12 @@ func (p Plugin) Exec() error {
 		assumeRole(p.Config.RoleARN)
 	}
 
+	// writing the .netrc file with Github credentials in it.
+	err = writeNetrc(p.Netrc.Machine, p.Netrc.Login, p.Netrc.Password)
+	if err != nil {
+		return err
+	}
+
 	os.Setenv("TF_DATA_DIR", p.Config.TerraformDataDir)
 
 	var commands []*exec.Cmd
@@ -118,7 +136,11 @@ func (p Plugin) Exec() error {
 	commands = append(commands, getModules())
 
 	for _, c := range commands {
-		err := p.RunCommand(c, os.Stdout, os.Stderr)
+		var stdout io.Writer = os.Stdout
+		if p.Config.Debug {
+			stdout = ioutil.Discard
+		}
+		err := p.RunCommand(c, stdout, os.Stderr)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err,
@@ -314,7 +336,16 @@ func (p Plugin) getPlanOutput() (string, error) {
 		return "", err
 	}
 
-	message := fmt.Sprintf("## %s\n\n```diff\n%s```\n", p.Config.Title, out.String())
+	opts := &parser.Parser{
+		Message: out.String(),
+		Mode:    p.Config.Mode,
+	}
+	msg, err := parser.Parse(opts)
+	if err != nil {
+		return "", err
+	}
+
+	message := fmt.Sprintf("## %s\n\n```diff\n%s```\n", p.Config.Title, msg)
 
 	return message, nil
 }
@@ -393,3 +424,32 @@ func installCaCert(cacert string) *exec.Cmd {
 func trace(cmd *exec.Cmd) {
 	fmt.Println("$", strings.Join(cmd.Args, " "))
 }
+
+// helper function to write a netrc file.
+// The following code comes from the official Git plugin for Drone:
+// https://github.com/drone-plugins/drone-git/blob/8386effd2fe8c8695cf979427f8e1762bd805192/utils.go#L43-L68
+func writeNetrc(machine, login, password string) error {
+	if machine == "" {
+		return nil
+	}
+	out := fmt.Sprintf(
+		netrcFile,
+		machine,
+		login,
+		password,
+	)
+
+	home := "/root"
+	u, err := user.Current()
+	if err == nil {
+		home = u.HomeDir
+	}
+	path := filepath.Join(home, ".netrc")
+	return ioutil.WriteFile(path, []byte(out), 0600)
+}
+
+const netrcFile = `
+machine %s
+login %s
+password %s
+`
