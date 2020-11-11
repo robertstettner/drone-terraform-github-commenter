@@ -6,9 +6,10 @@ go: 1.13
 gobuild_args: -ldflags "-s -w -X main.revision=$(git rev-parse HEAD)" -a
 
 env:
-  - TERRAFORM_VERSION=0.11.14
-  - TERRAFORM_VERSION=0.12.16
   - TERRAFORM_VERSION=0.12.20
+  - TERRAFORM_VERSION=0.13.1
+  - TERRAFORM_VERSION=0.13.2
+  - TERRAFORM_VERSION=0.13.4
 
 before_deploy:
   - docker build . -t robertstettner/drone-terraform-github-commenter:${TRAVIS_TAG}-${TERRAFORM_VERSION} --build-arg terraform_version=${TERRAFORM_VERSION}
